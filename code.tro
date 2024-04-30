@@ -1,0 +1,965 @@
+var
+  MyForm : TclGameForm;
+  //Menu Panel : 
+    pnlMenu,pnlLoginOrCreate:TclProPanel;
+    lblGameName:TClProLabel;
+    edtPassword:TclProEdit;
+    comboCount:TCLComboBox;
+    btnOk:TClProButton;
+  //Game Panel : 
+    pnlGame:TclProPanel;
+    lytTopGame:TClLayout;
+    mqttGame:TclMQTT;
+    imgPlayer1,imgPlayer2,imgAst1,imgAst2,imgAst3,imgAst4,imgAst5,imgAst6:TClProImage;
+    lblWinner,lblScore,lblPlyName1,lblPlyName2,lblConnectionGame:TClProLabel;
+    btnRestart,btnStart:TClProButton;
+    PlayerGuid,PlayerName,Player1Name,Player2Name,Player1,Player2,winner:String;
+    collisonBool , gameLoop : Boolean;
+    loop:TCLTimer;
+    score:Integer;
+    deviceManager:TclDeviceManager;
+    animasyon:TclBitmapListAnimation;
+    circle: TclRectangle;
+  //Joystick Panel
+    pnlJoystick , pnlContent : TclProPanel;
+    lytLeft,lytRight,lytCenter,lytTopJoys: TClLayout;
+    lblConnectionJoystick,lblPlayerName: TClProLabel;
+    btnForward,btnDown,btnLeft,btnRight , btn : TCLButton;
+    mqttJoys : TclMQTT;
+
+void CreateMenuPanel; //Menü Panelinin Oluşturulması
+{
+  pnlMenu = MyForm.AddNewProPanel(MyForm, 'pnlMenu');
+  pnlMenu.align = alClient;
+  MyForm.LytTopBar.Visible = True; 
+  
+  lblGameName = MyForm.AddNewProLabel(pnlMenu, 'lblGameName', 'ASTEROID');
+  lblGameName.align = alTop;
+  lblGameName.Margins.top = 40;
+  clComponent.SetupComponent(lblGameName,'{"TextColor":"#ffffff" , "TextVerticalAlign":"yes" , "TextHorizontalAlign":"yes" , "TextSize":25 , "TextBold":"yes"}');
+  
+  pnlLoginOrCreate = MyForm.AddNewProPanel(pnlMenu , 'pnlLoginOrCreate');
+  pnlLoginOrCreate.align = alCenter;
+  pnlLoginOrCreate.width = pnlMenu.width / 2;
+  pnlLoginOrCreate.height = pnlMenu.height / 3;
+  clComponent.SetupComponent(pnlLoginOrCreate , '{"BackGroundColor":"null"}');
+  
+  edtPassword = MyForm.AddNewProEdit(pnlLoginOrCreate , 'edtPassword' , 'Şifre');
+  edtPassword.align = alTop;
+  edtPassword.Margins.top = 5;
+  edtPassword.Margins.left = 5;
+  edtPassword.Margins.Right = 5;
+  edtPassword.height = pnlLoginOrCreate.height / 3.3;
+  clComponent.SetupComponent(edtPassword,'{"TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":25 , "TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "RoundWidth":10 , "RoundHeight":10 , "BorderColor":"#ffffff" , "BorderWidth":3 , "BackGroundColor":"null"}');
+
+  comboCount = MyForm.AddNewComboBox(pnlLoginOrCreate, 'comboCount');
+  comboCount.align = alCenter;
+  comboCount.Margins.left = 5;
+  comboCount.Margins.Right = 5;
+  comboCount.AddItem('1','1');
+  comboCount.AddItem('2','2');
+  comboCount.width = pnlLoginOrCreate.width / 1.25;
+  comboCount.height = pnlLoginOrCreate.height / 3.3;
+
+  btnOk = MyForm.AddNewProButton(pnlLoginOrCreate , 'btnOk' , 'Tamam');
+  btnOk.align = alBottom;
+  btnOk.Margins.bottom = 5;
+  btnOk.Margins.left = 5;
+  btnOk.Margins.Right = 5;
+  btnOk.height = pnlLoginOrCreate.height / 3.3;
+  clComponent.SetupComponent(btnOk,'{"TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":25 , "TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "RoundWidth":10 , "RoundHeight":10 , "BorderColor":"#ffffff" , "BorderWidth":3 , "BackGroundColor":"null"}');
+  MyForm.AddNewEvent(btnOk , tbeOnClick , 'Ok');
+  
+  if(Clomosy.AppUserProfile == 1)
+  {
+    comboCount.Visible = True;
+    pnlLoginOrCreate.width = pnlMenu.width / 2;
+    pnlLoginOrCreate.height = pnlMenu.height / 3;
+    btnOk.Text = 'Oluştur';
+    clComponent.SetupComponent(edtPassword,'{"PromptText":"Şifre Belirle"}');
+  }
+  else
+  {
+    comboCount.Visible = False;
+    pnlLoginOrCreate.width = pnlMenu.width / 2;
+    pnlLoginOrCreate.height = pnlMenu.height / 4;
+    btnOk.Text = 'Katıl';
+    clComponent.SetupComponent(edtPassword,'{"PromptText":"Şifre Gir"}');
+  }
+}
+void joysMqttStatus; //Joyistik Bağlantı Fonksiyonu.
+{
+  try
+  
+    if(mqttJoys.Connected == False)
+    {
+      lblConnectionJoystick.Text = 'Not Connected';
+      clComponent.SetupComponent(lblConnectionJoystick,'{"TextColor":"#ff0000"}');
+      mqttJoys.Connect;
+    }
+    else
+    {
+      clComponent.SetupComponent(lblConnectionJoystick,'{"TextColor":"#00e1ff"}');
+      lblConnectionJoystick.Text = 'Connected';
+    }
+  
+  except
+  
+    ShowMessage('Komut Gönderilirken Hata İle Karşılaşıldı');
+  }
+}
+void JoysMqttPublish; //Joyistik Ekranı Mesaj alma Fonksiyonu.
+{
+   try
+   
+     if(mqttJoys.ReceivedMessage == 'Die')
+     {
+       deviceManager.Vibrate(500);
+     }
+     if(mqttJoys.ReceivedMessage == 'Call')
+     {
+       if(mqttJoys.Connected == True)
+       {
+         mqttJoys.Send(Clomosy.AppUserGUID +':' +  '' + '+' + Clomosy.AppUserDisplayNamE);
+       }
+       else
+       {
+         mqttJoys.Connect;
+         mqttJoys.Send(Clomosy.AppUserGUID +':' +  '' + '+' + Clomosy.AppUserDisplayNamE);
+       }
+     }
+   
+   except
+   
+     ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+   }
+}
+void Up; //Uçak Yukarı.
+{
+  try
+  
+    if(mqttJoys.Connected == False)
+    {
+      mqttJoys.Connect
+    }
+    else
+    {
+      mqttJoys.Send(Clomosy.AppUserGUID +':' +  'Up' + '+' + Clomosy.AppUserDisplayNamE);
+    } 
+  
+  except
+  
+    ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+  }
+
+}
+void Down; //Uçak Aşağı.
+{
+  try
+  
+    if(mqttJoys.Connected == False)
+    {
+      mqttJoys.Connect;
+    }
+    else
+    {
+      mqttJoys.Send(Clomosy.AppUserGUID +':' +  'Down' + '+' + Clomosy.AppUserDisplayNamE);
+    }
+  
+  except
+  
+    ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+  }
+
+}
+void Right; //Uçak Sağ.
+{
+  try
+  
+    if(mqttJoys.Connected == False)
+    {
+      mqttJoys.Connect;
+    }
+    else
+    {
+      mqttJoys.Send(Clomosy.AppUserGUID +':' +  'Right' + '+' + Clomosy.AppUserDisplayNamE);
+    }
+  
+  except
+  
+    ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+  }
+}
+void Left; //Uçak Sol.
+{
+  try
+  
+    if(mqttJoys.Connected == False)
+    {
+      mqttJoys.Connect;
+    }
+    else
+    {
+      mqttJoys.Send(Clomosy.AppUserGUID +':' +  'Left' + '+' + Clomosy.AppUserDisplayNamE);
+    }
+  
+  except
+  
+    ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+  }
+}
+void CreateJoystickPanel; //Joyistik Panelini Oluşturan Fonksiyon.
+{
+  pnlJoystick = MyForm.AddNewProPanel(MyForm , 'pnlJoystick');
+  clComponent.SetupComponent(pnlJoystick,'{"BackGroundColor":"null"}');
+  pnlJoystick.align = alClient;
+  pnlJoystick.Visible = False;
+  
+  pnlContent = MyForm.AddNewProPanel(pnlJoystick,'pnlContent');
+  pnlContent.align = alCenter;
+  pnlContent.width = pnlJoystick.width / 1.25;
+  pnlContent.height = pnlJoystick.height / 2;
+  clComponent.SetupComponent(pnlContent,'{"BackGroundColor":"null" , "BorderColor":"#ffffff" , "BorderWidth":3 , "RoundHeight":10 , "RoundWidth":10}');
+  
+  lytLeft = MyForm.AddNewLayout(pnlContent,'lytLeft');
+  lytLeft.align = alLeft;
+  lytLeft.width = pnlContent.width / 3.25;
+  
+  lytRight = MyForm.AddNewLayout(pnlContent,'lytRight');
+  lytRight.align = alRight;
+  lytRight.width = pnlContent.width / 3.25;
+  
+  lytCenter = MyForm.AddNewLayout(pnlContent,'lytCenter');
+  lytCenter.align = alCenter;
+  lytCenter.height = pnlContent.height;
+  lytCenter.width = pnlContent.width / 3;
+  
+  btnLeft = MyForm.AddNewButton(lytLeft , 'btnLeft' , '←');
+  btnLeft.TextSettings.Font.Size = 75;
+  btnLeft.StyledSettings = ssFamily;
+  btnLeft.TextSettings.Font.Size = 90;
+  btnLeft.TextSettings.FontColor = clAlphaColor.clHexToColor('#ffffff');
+  btnLeft.align = alContents;
+  MyForm.AddNewEvent(btnLeft , tbeOnClick , 'Left');
+ 
+  btnRight = MyForm.AddNewButton(lytRight , 'btnRight' , '→');
+  btnRight.align = alContents;
+  MyForm.AddNewEvent(btnRight , tbeOnClick , 'Right');
+  btnRight.StyledSettings = ssFamily;
+  btnRight.TextSettings.Font.Size = 90;
+  btnRight.TextSettings.FontColor = clAlphaColor.clHexToColor('#ffffff');
+  
+  btnForward = MyForm.AddNewButton(lytCenter , 'btnForward' , '↑');
+  btnForward.align = alTop;
+  btnForward.height = lytCenter.height / 2.25;
+  btnForward.StyledSettings = ssFamily;
+  btnForward.TextSettings.Font.Size = 90;
+  btnForward.TextSettings.FontColor = clAlphaColor.clHexToColor('#ffffff');
+  MyForm.AddNewEvent(btnForward , tbeOnClick , 'Up');
+  btnForward.margins.top = 10;
+ 
+  btnDown = MyForm.AddNewButton(lytCenter , 'btnDown' , '↓');
+  btnDown.align = alBottom;
+  btnDown.height = lytCenter.height / 2.25;
+  btnDown.StyledSettings = ssFamily;
+  btnDown.TextSettings.Font.Size = 90;
+  btnDown.TextSettings.FontColor = clAlphaColor.clHexToColor('#ffffff');
+  MyForm.AddNewEvent(btnDown , tbeOnClick , 'Down');
+  btnDown.margins.bottom = 10;
+  
+  mqttJoys = MyForm.AddNewMQTTConnection(MyForm , 'mqttJoys');
+  MyForm.AddNewEvent(mqttJoys,tbeOnMQTTStatusChanged,'joysMqttStatus');
+  MyForm.AddNewEvent(mqttJoys,tbeOnMQTTPublishReceived,'JoysMqttPublish');
+  deviceManager = TclDeviceManager.Create;
+  
+  lytTopJoys = MyForm.AddNewLayout(pnlJoystick,'lytTopJoys');
+  lytTopJoys.align = alMostTop;
+  
+  lblConnectionJoystick = MyForm.AddNewProLabel(lytTopJoys , 'lblConnectionJoystick' , '');
+  lblConnectionJoystick.align = alRight;
+  lblConnectionJoystick.width = 175;
+  lblConnectionJoystick.margins.Right = 25;
+  clComponent.SetupComponent(lblConnectionJoystick,'{"TextColor":"#00bfff" , "TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextSize":25 , "TextBold":"yes"}');
+
+  lblPlayerName = MyForm.AddNewProLabel(lytTopJoys , 'lblPlayerName' , Clomosy.AppUserDisplayNamE);
+  lblPlayerName.align = alLeft;
+  lblPlayerName.margins.Left = 10;
+  lblPlayerName.width = 200;
+  clComponent.SetupComponent(lblPlayerName,'{"TextColor":"#ffffff" , "TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextSize":25 , "TextBold":"yes"}');
+}
+void gameMqttStatus; //Oyun Ekranı Bağlantı Fonksiyonu.
+{
+  try
+  
+     if(mqttGame.Connected == False)
+     {
+       lblConnectionGame.Text = 'Not Connected';
+       clComponent.SetupComponent(lblConnectionGame,'{"TextColor":"#ff0000"}');
+       mqttGame.Connect;
+     }
+     else
+     {
+       clComponent.SetupComponent(lblConnectionGame,'{"TextColor":"#00bfff"}');
+       lblConnectionGame.Text = 'Connected';
+     } 
+  
+  except
+  
+    ShowMessage('Komut Gönderilirken Hata İle Karşılaşıldı');
+  }
+}
+void PlayerPositionControl; //Uçakların Ekran Dışına Çıkmalarını Engelleyen Fonksiyon.
+{
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    if(imgPlayer1.Position.X < 0)
+    {
+      imgPlayer1.Position.X = 0;
+    }
+    if(imgPlayer1.Position.X + imgPlayer1.width >= TForm(MyForm).ClientWidth)
+    {
+      imgPlayer1.Position.X = TForm(MyForm).ClientWidth - imgPlayer1.width;
+    }
+    if(imgPlayer1.Position.Y <= 0)
+    {
+      imgPlayer1.Position.y = 0;
+    }
+    if(imgPlayer1.Position.Y + imgPlayer1.height >= TForm(MyForm).ClientHeight)
+    {
+      imgPlayer1.Position.y = TForm(MyForm).ClientHeight - imgPlayer1.height;
+    }
+  }
+  else
+  {
+    if(imgPlayer1.Position.X < 0)
+    {
+      imgPlayer1.Position.X = 0;
+    }
+    if(imgPlayer1.Position.X + imgPlayer1.width >= TForm(MyForm).ClientWidth)
+    {
+      imgPlayer1.Position.X = TForm(MyForm).ClientWidth - imgPlayer1.width;
+    }
+    if(imgPlayer1.Position.Y <= 0)
+    {
+      imgPlayer1.Position.y = 0;
+    }
+    if(imgPlayer1.Position.Y + imgPlayer1.height >= TForm(MyForm).ClientHeight)
+    {
+      imgPlayer1.Position.y = TForm(MyForm).ClientHeight - imgPlayer1.height;
+    }
+    
+    if(imgPlayer2.Position.X < 0)
+    {
+      imgPlayer2.Position.X = 0;
+    }
+    if(imgPlayer2.Position.X + imgPlayer2.width >= TForm(MyForm).ClientWidth)
+    {
+      imgPlayer2.Position.X = TForm(MyForm).ClientWidth - imgPlayer2.width;
+    }
+    if(imgPlayer2.Position.Y <= 0)
+    {
+      imgPlayer2.Position.y = 0;
+    }
+    if(imgPlayer2.Position.Y + imgPlayer2.height >= TForm(MyForm).ClientHeight)
+    {
+      imgPlayer2.Position.y = TForm(MyForm).ClientHeight - imgPlayer2.height;
+    }
+  }
+}
+void gameMqttPublish; //Oyun Ekranı Mesaj Alma Fonksiyonu.
+{
+  try
+  
+     PlayerGuid = Trim(CLGetStringTo(mqttGame.ReceivedMessage , ':'));
+     PlayerName = Trim(ClGetStringAfter(mqttGame.ReceivedMessage , '+'));
+     if(mqttGame.ReceivedAlRight)
+     {
+        if(Player1 == '')
+        {
+          Player1 = PlayerGuid;
+          Player1Name = PlayerName;
+          lblPlyName1.Text = Player1Name;
+        }
+        if((Player2 == '') && (Player1 <> PlayerGuid))
+        {
+          Player2 = PlayerGuid;
+          Player2Name = PlayerName;
+          lblPlyName2.Text = Player2Name;
+        }
+     }
+     
+     if(POS('Up' , mqttGame.ReceivedMessage) > 0)
+     {
+       if(PlayerGuid == Player1) 
+       {
+         imgPlayer1.Position.Y = imgPlayer1.Position.Y - 55;
+       }
+       if(PlayerGuid == Player2)
+       {
+         imgPlayer2.Position.Y = imgPlayer2.Position.Y - 55;
+       }
+     }
+    if(POS('Down' , mqttGame.ReceivedMessage) > 0)
+    {
+       if(PlayerGuid == Player1) 
+       {
+         imgPlayer1.Position.Y = imgPlayer1.Position.Y + 55;
+       }
+       if(PlayerGuid == Player2)
+       {
+         imgPlayer2.Position.Y = imgPlayer2.Position.Y + 55;
+       }
+    }
+    if(POS('Right' , mqttGame.ReceivedMessage) > 0)
+    {
+       if(PlayerGuid == Player1) 
+       {
+         imgPlayer1.Position.X = imgPlayer1.Position.X + 55;
+       }
+       if(PlayerGuid == Player2)
+       {
+         imgPlayer2.Position.X = imgPlayer2.Position.X + 55;
+       }
+    }
+    if(POS('Left' , mqttGame.ReceivedMessage) > 0)
+    {
+       if(PlayerGuid == Player1) 
+       {
+         imgPlayer1.Position.X = imgPlayer1.Position.X - 55;
+       }
+       if(PlayerGuid == Player2)
+       {
+         imgPlayer2.Position.X = imgPlayer2.Position.X - 55;
+       }
+    }
+    PlayerPositionControl; 
+  
+  except
+  
+    ShowMessage('Exception Class: '+LastExceptionClassName+' Exception Message: '+LastExceptionMessage);
+  }
+}
+void CrashMove; //Asteroitlerin Hareketini Sağlayan Fonksiyon.
+{
+  if(gameLoop == True)
+  {
+    score = score + 1;
+    lblScore.Text = IntToStr(score);
+    if((score >= 0) && (score < 250))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 5;
+      imgAst2.Position.y = imgAst2.Position.y + 5;
+      imgAst3.Position.y = imgAst3.Position.y + 5;
+      imgAst4.Position.y = imgAst4.Position.y + 5;
+      imgAst5.Position.y = imgAst5.Position.y + 5;
+      imgAst6.Position.y = imgAst6.Position.y + 5;
+    }
+    if((score >= 251) && (score <= 500))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 10;
+      imgAst2.Position.y = imgAst2.Position.y + 10;
+      imgAst3.Position.y = imgAst3.Position.y + 10;
+      imgAst4.Position.y = imgAst4.Position.y + 10;
+      imgAst5.Position.y = imgAst5.Position.y + 10;
+      imgAst6.Position.y = imgAst6.Position.y + 10;
+    }
+    if((score >= 501) && (score <= 750))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 15;
+      imgAst2.Position.y = imgAst2.Position.y + 15;
+      imgAst3.Position.y = imgAst3.Position.y + 15;
+      imgAst4.Position.y = imgAst4.Position.y + 15;
+      imgAst5.Position.y = imgAst5.Position.y + 15;
+      imgAst6.Position.y = imgAst6.Position.y + 15;
+    }
+    if((score >= 751) && (score <= 1000))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 20;
+      imgAst2.Position.y = imgAst2.Position.y + 20;
+      imgAst3.Position.y = imgAst3.Position.y + 20;
+      imgAst4.Position.y = imgAst4.Position.y + 20;
+      imgAst5.Position.y = imgAst5.Position.y + 20;
+      imgAst6.Position.y = imgAst6.Position.y + 20;
+    }
+    if((score >= 1001) && (score <= 1250))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 25;
+      imgAst2.Position.y = imgAst2.Position.y + 25;
+      imgAst3.Position.y = imgAst3.Position.y + 25;
+      imgAst4.Position.y = imgAst4.Position.y + 25;
+      imgAst5.Position.y = imgAst5.Position.y + 25;
+      imgAst6.Position.y = imgAst6.Position.y + 25;
+    }
+    if((score >= 1251) && (score <= 1500))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 30;
+      imgAst2.Position.y = imgAst2.Position.y + 30;
+      imgAst3.Position.y = imgAst3.Position.y + 30;
+      imgAst4.Position.y = imgAst4.Position.y + 30;
+      imgAst5.Position.y = imgAst5.Position.y + 30;
+      imgAst6.Position.y = imgAst6.Position.y + 30;
+    }
+    if((score >= 1501) && (score <= 1750))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 35;
+      imgAst2.Position.y = imgAst2.Position.y + 35;
+      imgAst3.Position.y = imgAst3.Position.y + 35;
+      imgAst4.Position.y = imgAst4.Position.y + 35;
+      imgAst5.Position.y = imgAst5.Position.y + 35;
+      imgAst6.Position.y = imgAst6.Position.y + 35;
+    }
+    if((score >= 1751) && (score <= 2000))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 40;
+      imgAst2.Position.y = imgAst2.Position.y + 40;
+      imgAst3.Position.y = imgAst3.Position.y + 40;
+      imgAst4.Position.y = imgAst4.Position.y + 40;
+      imgAst5.Position.y = imgAst5.Position.y + 40;
+      imgAst6.Position.y = imgAst6.Position.y + 40;
+    }
+    if((score >= 2001) && (score <= 2250))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 45;
+      imgAst2.Position.y = imgAst2.Position.y + 45;
+      imgAst3.Position.y = imgAst3.Position.y + 45;
+      imgAst4.Position.y = imgAst4.Position.y + 45;
+      imgAst5.Position.y = imgAst5.Position.y + 45;
+      imgAst6.Position.y = imgAst6.Position.y + 45;
+    }
+    if((score >= 2251) && (score <= 2500))
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 50;
+      imgAst2.Position.y = imgAst2.Position.y + 50;
+      imgAst3.Position.y = imgAst3.Position.y + 50;
+      imgAst4.Position.y = imgAst4.Position.y + 50;
+      imgAst5.Position.y = imgAst5.Position.y + 50;
+      imgAst6.Position.y = imgAst6.Position.y + 50;
+    }
+    if(score > 2750)
+    {
+      imgAst1.Position.y = imgAst1.Position.y + 55;
+      imgAst2.Position.y = imgAst2.Position.y + 55;
+      imgAst3.Position.y = imgAst3.Position.y + 55;
+      imgAst4.Position.y = imgAst4.Position.y + 55;
+      imgAst5.Position.y = imgAst5.Position.y + 55;
+      imgAst6.Position.y = imgAst6.Position.y + 55;
+    }
+  
+    if(imgAst1.Position.Y > (TForm(MyForm).ClientHeight))
+    {
+      imgAst1.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst1.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    }
+    if(imgAst2.Position.Y >= (TForm(MyForm).ClientHeight))
+    {
+      imgAst2.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst2.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    }
+    if(imgAst3.Position.Y >= (TForm(MyForm).ClientHeight))
+    {
+      imgAst3.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst3.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    }
+    if(imgAst4.Position.Y >= (TForm(MyForm).ClientHeight))
+    {
+      imgAst4.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst4.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    }
+    if(imgAst5.Position.Y >= (TForm(MyForm).ClientHeight))
+    {
+      imgAst5.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst5.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    }
+    if(imgAst6.Position.Y >= (TForm(MyForm).ClientHeight))
+    {
+      imgAst6.Position.y = clMath.GenerateRandom(-200 , -64);
+      imgAst6.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+    } 
+  }
+}
+void OnCollisionEnter; //Çarpışmaları Algılayan Fonksiyon.
+{
+  if(collisonBool == True)
+  {
+    if(Clomosy.GlobalVariableInteger == 1)
+    {
+      if((MyForm.clIsIntersectsWith(imgPlayer1,imgAst1)) || (MyForm.clIsIntersectsWith(imgPlayer1,imgAst2) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst3) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst4) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst5) || (MyForm.clIsIntersectsWith(imgPlayer1,imgAst6)))))))
+      {
+        circle.Visible = True;
+        animasyon.AnimationCount = 9;
+        animasyon.AnimationRowCount = 3;
+        animasyon.Duration = 1;
+        circle.Position.X = imgPlayer1.Position.X - imgPlayer1.width / 2;
+        circle.Position.Y = imgPlayer1.Position.Y - imgPlayer1.height / 2;
+        animasyon.Start;
+        imgPlayer1.Visible = False;
+        collisonBool = False;
+        btnRestart.Visible = True;
+        loop.enabled = False;
+        lblWinner.Text = 'Kaybettin';
+        lblWinner.Visible = True;
+        mqttGame.Send('Die');
+        score = 0;
+      }
+    }
+    else
+    {
+      if((MyForm.clIsIntersectsWith(imgPlayer1,imgAst1)) || (MyForm.clIsIntersectsWith(imgPlayer1,imgAst2) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst3) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst4) ||(MyForm.clIsIntersectsWith(imgPlayer1,imgAst5) || (MyForm.clIsIntersectsWith(imgPlayer1,imgAst6)))))))
+      { 
+        circle.Visible = True;
+        animasyon.AnimationCount = 9;
+        animasyon.AnimationRowCount = 3;
+        animasyon.Duration = 1;
+        circle.Position.X = imgPlayer1.Position.X - imgPlayer1.width / 2;
+        circle.Position.Y = imgPlayer1.Position.Y - imgPlayer1.height / 2;
+        animasyon.Start;
+        imgPlayer1.Visible = False;
+        collisonBool = False;
+        lblWinner.Text = 'Kazanan : ' + Player2Name;
+        btnRestart.Visible = True;
+        loop.enabled = False
+        lblWinner.Visible = True;
+        mqttGame.Send('Die');
+        score = 0;
+      }
+      if((MyForm.clIsIntersectsWith(imgPlayer2,imgAst1)) || (MyForm.clIsIntersectsWith(imgPlayer2,imgAst2) ||(MyForm.clIsIntersectsWith(imgPlayer2,imgAst3) ||(MyForm.clIsIntersectsWith(imgPlayer2,imgAst4) ||(MyForm.clIsIntersectsWith(imgPlayer2,imgAst5) || (MyForm.clIsIntersectsWith(imgPlayer2,imgAst6)))))))
+      {
+        circle.Visible = True;
+        animasyon.AnimationCount = 9;
+        animasyon.AnimationRowCount = 3;
+        animasyon.Duration = 1;
+        circle.Position.X = imgPlayer2.Position.X - imgPlayer2.width / 2;
+        circle.Position.Y = imgPlayer2.Position.Y - imgPlayer2.height / 2;
+        animasyon.Start;
+        imgPlayer2.Visible = False;
+        collisonBool = False;
+        lblWinner.Text = 'Kazanan : ' + Player1Name;
+        btnRestart.Visible = True;
+        loop.enabled = False;
+        lblWinner.Visible = True;
+        mqttGame.Send('Die');
+        score = 0;
+      }
+    }
+  }
+}
+void Loop; //Timer Event.
+{
+  CrashMove;
+  OnCollisionEnter;
+  if(gameLoop == False)
+  {
+    if(mqttGame.Connected == True)
+    {
+      mqttGame.Send('Call');
+    }
+    else
+    {
+      mqttGame.Connect;
+    }
+  }
+}
+void RestartGame; //Kaybettiğimiz Zaman Tekrardan Oynamamızı Sağlayan Fonksiyon.
+{
+  circle.Visible = False;
+  btnRestart.Visible = False;
+  loop.enabled = True;
+  imgAst1.Position.y = -35;
+  imgAst2.Position.y = -35;
+  imgAst3.Position.y = -35;
+  imgAst4.Position.y = -35;
+  imgAst5.Position.y = -35;
+  imgAst6.Position.y = -35;
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    imgPlayer1.Visible = True;
+    imgPlayer1.position.x = ((TForm(MyForm).ClientWidth / 2) - (imgPlayer1.width / 2));
+    imgPlayer1.position.y = 750;
+  }
+  else
+  {
+    imgPlayer1.Visible = True;
+    imgPlayer2.Visible = True;
+
+    imgPlayer1.position.x = TForm(MyForm).ClientWidth / 2.25;
+    imgPlayer1.position.y = 750;
+
+    imgPlayer2.position.x = TForm(MyForm).ClientWidth / 2;
+    imgPlayer2.position.y = 750;
+  }
+  collisonBool = True;
+
+  imgAst1.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  imgAst2.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  imgAst3.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  imgAst4.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  imgAst5.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  imgAst6.Position.X = clMath.GenerateRandom(0 , TForm(MyForm).ClientWidth);
+  lblWinner.Visible = False;
+}
+void CreateGamePanel; //Oyun Ekranının Oluşturulmasını Sağlayan Fonksiyon.
+{
+  pnlGame = MyForm.AddNewProPanel(MyForm , 'pnlGame');
+  pnlGame.Visible = True;
+  pnlGame.align = alContents;
+  MyForm.LytTopBar.Visible = False;
+  score = 0;
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    imgPlayer1 = MyForm.AddNewProImage(pnlGame, 'imgPlayer1');
+    imgPlayer1.align = alNone;
+    imgPlayer1.position.x = ((TForm(MyForm).ClientWidth / 2) - (imgPlayer1.width / 2));
+    imgPlayer1.position.y = 750;
+    imgPlayer1.width = 64;
+    imgPlayer1.height = 64;
+    
+    lblPlyName1 = MyForm.AddNewProLabel(imgPlayer1,'lblPlyName1','');
+    lblPlyName1.align = alCenter;
+    lblPlyName1.margins.bottom = 100;
+    clComponent.SetupComponent(lblPlyName1,'{"TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":15}');
+  }
+  if(Clomosy.GlobalVariableInteger == 2)
+  {
+    imgPlayer1 = MyForm.AddNewProImage(pnlGame, 'imgPlayer1');
+    imgPlayer1.align = alNone;
+    imgPlayer1.position.x = TForm(MyForm).ClientWidth / 2.25;
+    imgPlayer1.position.y = 750;
+    imgPlayer1.width = 64;
+    imgPlayer1.height = 64;
+    
+    lblPlyName1 = MyForm.AddNewProLabel(imgPlayer1,'lblPlyName1','');
+    lblPlyName1.align = alCenter;
+    lblPlyName1.margins.bottom = 100;
+    clComponent.SetupComponent(lblPlyName1,'{"TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":15}');
+    
+    imgPlayer2 = MyForm.AddNewProImage(pnlGame, 'imgPlayer2');
+    imgPlayer2.align = alNone;
+    imgPlayer2.position.x = TForm(MyForm).ClientWidth / 2;
+    imgPlayer2.position.y = 750;
+    imgPlayer2.width = 64;
+    imgPlayer2.height = 64
+    
+    lblPlyName2 = MyForm.AddNewProLabel(imgPlayer2,'lblPlyName2','');
+    lblPlyName2.align = alCenter;
+    lblPlyName2.margins.bottom = 100;
+    clComponent.SetupComponent(lblPlyName2,'{"TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":15}');
+  }
+  mqttGame = MyForm.AddNewMQTTConnection(MyForm , 'mqttGame');
+  MyForm.AddNewEvent(mqttGame,tbeOnMQTTStatusChanged,'gameMqttStatus');
+  MyForm.AddNewEvent(mqttGame,tbeOnMQTTPublishReceived,'gameMqttPublish');
+  
+  Player1 = '';
+  Player2 = '';
+  
+  loop = MyForm.AddNewTimer(MyForm,'loop' , 36);
+  MyForm.AddNewEvent(loop , tbeOnTimer , 'Loop');
+  loop.enabled = True;
+  
+  imgAst1 = MyForm.AddNewProImage(pnlGame , 'imgAst1');
+  imgAst1.align = alNone;
+  imgAst1.Position.Y = -90;
+  imgAst1.width = 64;
+  imgAst1.height = 64;
+  imgAst1.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+
+  imgAst2 = MyForm.AddNewProImage(pnlGame , 'imgAst2');
+  imgAst2.align = alNone;
+  imgAst2.Position.Y = -75;
+  imgAst2.width = 64;
+  imgAst2.height = 64;
+  imgAst2.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+  
+  imgAst3 = MyForm.AddNewProImage(pnlGame , 'imgAst3');
+  imgAst3.align = alNone;
+  imgAst3.Position.Y = -85;
+  imgAst3.width = 64;
+  imgAst3.height = 64;
+  imgAst3.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+  
+  imgAst4 = MyForm.AddNewProImage(pnlGame , 'imgAst4');
+  imgAst4.align = alNone;
+  imgAst4.Position.Y = -100;
+  imgAst4.width = 64;
+  imgAst4.height = 64;
+  imgAst4.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+  
+  imgAst5 = MyForm.AddNewProImage(pnlGame , 'imgAst5');
+  imgAst5.align = alNone;
+  imgAst5.Position.Y = -125;
+  imgAst5.width = 64;
+  imgAst5.height = 64;
+  imgAst5.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+  
+  btnRestart = MyForm.AddNewProButton(pnlGame , 'btnRestart' , 'Restart');
+  btnRestart.align = alCenter;
+  btnRestart.Visible = False;
+  btnRestart.width = 200;
+  btnRestart.height = 100;
+  clComponent.SetupComponent(btnRestart , '{"TextSize":25 , "TextColor":"#ffffff" , "TextBold":"yes" , "BackGroundColor":"null" , "RoundHeight":10 , "RoundWidth":10 , "BorderWidth":3 , "BorderColor":"#ffffff"}');
+  MyForm.AddNewEvent(btnRestart , tbeOnClick , 'RestartGame');
+  
+  imgAst6 = MyForm.AddNewProImage(pnlGame , 'imgAst6');
+  imgAst6.align = alNone;
+  imgAst6.Position.Y = -97;
+  imgAst6.width = 64;
+  imgAst6.height = 64;
+  imgAst6.Position.X = clMath.GenerateRandom(5 , TForm(MyForm).ClientWidth - 64);
+  
+  lblWinner = Myform.AddNewProLabel(pnlGame , 'lblWinner' , 'WIN');
+  lblWinner.align = alTop;
+  lblWinner.margins.top = 25;
+  lblWinner.height = 50;
+  lblWinner.Visible = False;
+  clComponent.SetupComponent(lblWinner , '{"TextColor":"#ffffff" , "TextVerticalAlign":"yes" , "TextHorizontalAlign":"yes" , "TextSize":23 , "TextBold":"yes"}');
+  
+  btnStart = Myform.AddNewProButton(pnlGame , 'btnStart' , 'BAŞLAT');
+  btnStart.align = alCenter;
+  btnStart.width = TForm(Myform).ClientWidth / 3;
+  btnStart.height = TForm(Myform).ClientHeight / 6;
+  Myform.AddNewEvent(btnStart , tbeOnClick , 'GameStart');
+  clComponent.SetupComponent(btnStart , '{"RoundWidth":10 , "RoundHeight":10 , "BorderColor":"#ffffff" , "BorderWidth":3 , "BackGroundColor":"null" , "TextColor":"#ffffff" , "TextBold":"yes" , "TextSize":20}');
+
+  gameLoop = False;
+  
+  lblScore = Myform.AddNewProLabel(pnlGame , 'lblScore' , 'score');
+  lblScore.align = alMostTop;
+  lblScore.margins.top = 10;
+  clComponent.SetupComponent(lblScore,'{"TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextSize":"20" , "TextBold":"yes" , "TextColor":"#ffffff"}'); 
+
+  lytTopGame = Myform.AddNewLayout(pnlGame,'lytTopGame');
+  lytTopGame.align = alMostTop;
+
+  lblConnectionGame = Myform.AddNewProLabel(lytTopGame,'lblConnectionGame','');
+  lblConnectionGame.align = alRight;
+  lblConnectionGame.width = 250;
+  lblConnectionGame.margins.Right = 15;
+  clComponent.SetupComponent(lblConnectionGame,'{"TextColor":"#00bfff" , "TextVerticalAlign":"center" , "TextHorizontalAlign":"center" , "TextSize":25 , "TextBold":"yes"}');
+
+  Myform.SetImage(imgAst1,'meteor4.png');
+  Myform.SetImage(imgAst2,'meteor1.png');
+  Myform.SetImage(imgAst3,'meteor6.png');
+  Myform.SetImage(imgAst4,'meteor3.png');
+  Myform.SetImage(imgAst5,'meteor2.png');
+  Myform.SetImage(imgAst6,'meteor5.png');
+  
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    Myform.SetImage(imgPlayer1 , 'meteorgamerocket3.png');
+  }
+  else
+  {
+    Myform.SetImage(imgPlayer1 , 'meteorgamerocket3.png');
+    Myform.SetImage(imgPlayer2 , 'meteorgamerocket4.png'); 
+  }
+  
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    lblScore.Visible = True;
+  }
+  else
+  {
+    lblScore.Visible = False;
+  }
+  
+  circle = Myform.AddNewCircle(pnlGame, 'circle');
+  circle.Fill.Kind = fbkBitmap;
+  circle.Width = 133;
+  circle.Height = 133;
+  circle.Visible = False;
+  circle.Stroke.Thickness = 0;
+  circle.align = alNone;
+  
+  animasyon = Myform.AddNewBitmapListAnimation(circle,'animasyon');
+  animasyon.AnimationBitmap.LoadFromFile(clomosy.appfilespath + 'Explosion.png');
+  animasyon.Enabled = True;
+}
+void GameStart; //Oyunu Başlatma Butonuna bastığımızda çalışan Fonksiyon.
+{
+  if(Clomosy.GlobalVariableInteger == 1)
+  {
+    if((Player1 == null) || (Player1 == ''))
+    {
+      ShowMessage('Eksik Oyuncu !');
+    }
+    else
+    {
+      btnStart.Visible = False;
+      gameLoop = True;
+    }
+  }
+  else
+  {
+    if((Player1 == '') || (Player2 == ''))
+    {
+      ShowMessage('Eksik Oyuncu !');
+    }
+    else
+    {
+      btnStart.Visible = False;
+      gameLoop = True;
+    }
+  }
+
+}
+void Ok; //Oda Oluştururken ya da Odaya Katılırken Butona Bastığımızda Çalışan Fonksiyon.
+{
+  if(comboCount.Items[comboCount.ItemIndex] == 1)
+  {
+    Clomosy.GlobalVariableInteger = 1;
+  }
+  else
+  {
+    Clomosy.GlobalVariableInteger = 2;
+  }
+  
+  if((edtPassword.Text <> null) && (edtPassword.Text <> ''))
+  {
+    if(Clomosy.AppUserProfile == 1)
+    {
+      CreateGamePanel;
+      mqttGame.channel = edtPassword.Text;
+      mqttGame.Connect;
+    }
+    else
+    {
+      mqttJoys.channel = edtPassword.Text;
+      mqttJoys.Connect;
+      pnlContent.Visible = True;
+      pnlLoginOrCreate.Visible = False;
+      pnlJoystick.Visible = True;
+    }
+    pnlMenu.Visible = False;
+  }
+  else
+  {
+    ShowMessage('Şifre Alanı Boş Bırakılamaz');
+  }
+  collisonBool = True;
+}
+{
+  MyForm = TclGameForm.Create(Self);
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor1.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor2.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor3.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor4.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor5.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteor6.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteorgamerocket4.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteorgamerocket3.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/meteorgamebg.png');
+  MyForm.AddGameAssetFromUrl('https://clomosy.com/demos/Explosion.png');
+  MyForm.SetFormBGImage('meteorgamebg.png');
+  MyForm.clSetWindowState(fwsMaximized);
+  CreateMenuPanel;
+  if(Clomosy.AppUserProfile <> 1)
+  {
+    CreateJoystickPanel;
+    pnlContent.Visible = False;
+    pnlLoginOrCreate.Visible = True;
+  }
+  
+  if Clomosy.PlatformIsMobile
+  MyForm.Run;
+  else
+  MyForm.RunModal;
+}
