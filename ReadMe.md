@@ -15,21 +15,24 @@ See also : [Application_Development_Environment](https://www.docs.clomosy.com/Ap
 
 **NOTE 2:** Only the user who will launch the application on the **Windows** platform needs to have administrator privileges in this project.
 
-Windows Usage:
+## Windows Usage:
 
-  - Launch the Application: Start the Windows application on your computer.
-  - Click on the "Play" button on the screen.
-  - Then click on the "Monitor" button on the screen. Specify the number of users and the room password in the pop-up window.
+* Launch the application: Start the Windows application on your computer.
+* Enter a password in the "Set Password" field on the screen.
+* Then, select the number of users.
+* Press the "Create" button to enter the game field.
+* After this, provide the password to 2 mobile users so they can log in.
+* After the users log in, press the "START" button to begin the game.
 
-Mobile Usage:
+## Mobile Usage:
 
-  - Users participating in the game must launch the project on their mobile devices.
-  - Click on the "Play" button on the screen.
-  - Click on the "Console" button on the screen and enter the room password.
-  - To start the game, press the start button on Windows.
+* Users who want to join the game need to start the project on their mobile devices.
+* Enter the password defined in the Windows administrator account in the "Enter Password" field on the screen.
+* Then, click the "Join" button and wait for the game to be launched from the Windows platform.
 
-Note:
-  - The game screen is designed to be displayed on Windows.
-  - Users participating in the game use their mobile devices as controllers.
-  - The user who first collides with an asteroid loses the game.
-  - Don't forget to add users to the project.
+## Note:
+
+* The game screen is designed to be displayed on the Windows platform.
+* The users joining the game will use their mobile devices as controllers.
+* The first user to crash into the asteroid loses the game.
+* Don’t forget to add users to the project.
